@@ -47,7 +47,7 @@ func NewList(d time.Duration) *List {
 	var list = &List{connections: make(map[string]*ConnInfo)}
 	// периодически очищаем информацию с устаревшими данными
 	go func() {
-		time.Sleep(d)
+		time.Sleep(d + d/2) // полуторный интервал задержки с очисткой
 		var lastValid = time.Now().Add(-d)
 		list.mu.Lock()
 		for id, ci := range list.connections {

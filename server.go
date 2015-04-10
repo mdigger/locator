@@ -10,14 +10,10 @@ import (
 	"time"
 )
 
-const (
-	DefaultDuration = 5 * time.Minute // время жизни по умолчанию.
-)
-
 // Server описывает серверные подключения клиентов.
 type Server struct {
 	Addr        string        // TCP-адрес и порт сервера
-	Duration    time.Duration // время жизни неактивного соединения
+	Duration    time.Duration // время жизни неактивного соединения (по умолчанию 5 минут)
 	TLSConfig   *tls.Config   // конфигурация TLS, которая используется ListenAndServeTLS
 	ErrorLog    *log.Logger   // вывод лога (если не определен, то используется стандартный)
 	connections *List         // информация об установленных соединениях
@@ -74,8 +70,8 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 // Serve принимает входящее соединение и запускает в отдельном потоке его обработку.
 func (srv *Server) Serve(l net.Listener) error {
 	srv.logf("Listen %s...", srv.Addr)
-	if srv.Duration == 0 {
-		srv.Duration = DefaultDuration // по умолчанию время жизни -- 5 минут
+	if srv.Duration < 30*time.Second {
+		srv.Duration = 5 * time.Minute // по умолчанию время жизни -- 5 минут
 	}
 	if srv.connections == nil {
 		srv.connections = NewList(srv.Duration) // инициализируем хранилище информации о соединениях
@@ -124,9 +120,12 @@ func (srv *Server) servConn(conn net.Conn) {
 		addr   = conn.RemoteAddr().String() // адрес удаленного сервера
 		id     string                       // уникальный идентификатор соединения
 	)
+	srv.logf("-> %s", addr)       // выводим информацию об установленно соединении
+	defer srv.logf("<- %s", addr) // выводим информацию о закрытии соединения
 	// читаем команды до тех пор, пока соединение не будет закрыто
 	for {
-		message, err := reader.ReadString('\n') // читаем команду до конца строки
+		conn.SetDeadline(time.Now().Add(srv.Duration)) // устанавливаем время жизни по умолчанию
+		message, err := reader.ReadString('\n')        // читаем команду до конца строки
 		if id != "" {
 			srv.connections.Update(id) // обновляем время последней активности клиента
 		}
@@ -144,6 +143,7 @@ func (srv *Server) servConn(conn net.Conn) {
 			param = strings.TrimSpace(splits[1]) // сохраняем параметр, если он есть
 		}
 		// обрабатываем команды
+		srv.logf("?> %s %s %s", addr, cmd, param) // выводим информацию о запросе
 		switch cmd {
 		case CONNECT: // подключение
 			if id == "" {
@@ -167,12 +167,12 @@ func (srv *Server) servConn(conn net.Conn) {
 		case INFO: // запрос информации о соединении
 			if info := srv.connections.Info(param); info != nil &&
 				time.Since(info.updated) < srv.Duration {
-				fmt.Fprintln(conn, OK, INFO, param, info.String())
+				fmt.Fprintln(conn, INFO, param, info.String())
 			} else {
 				fmt.Fprintln(conn, OK, "Not found", param)
 			}
 		case PING: // поддержка соединения
-			fmt.Fprintln(conn, OK, PONG, param)
+			fmt.Fprintln(conn, PONG, param)
 		case DISCONNECT: // закрытие соединения
 			fmt.Fprintln(conn, OK, "Disconnected")
 			conn.Close() // закрываем соединение
