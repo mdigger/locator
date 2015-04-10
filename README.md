@@ -26,6 +26,15 @@
 	PONG text
 	info test
 	INFO test 127.0.0.1:49731 2015-04-10T23:06:35Z my status text
+	disconnect
+	OK Disconnected
+	Connection closed by foreign host.
+	$ telnet localhost 9000
+	Trying 127.0.0.1...
+	Connected to localhost.
+	Escape character is '^]'.
+	info test
+	INFO test 127.0.0.1:49731 2015-04-10T23:08:40Z my status text
 
 
 ## Планы
