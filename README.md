@@ -13,6 +13,21 @@
 
 Соединение автоматически разрывается, если в течении 5 минут не было передано ни одной команды. Любая команда (даже неверная) устанавливает время обновления информации о соединении в текущее. Регистр команд неважен, а вот идентификатор соединения является чувствительным к регистру.
 
+
+	$ telnet localhost 9000
+	Trying 127.0.0.1...
+	Connected to localhost.
+	Escape character is '^]'.
+	connect test
+	OK Connected
+	status my status text
+	OK Status changed
+	ping text
+	PONG text
+	info test
+	INFO test 127.0.0.1:49731 2015-04-10T23:06:35Z my status text
+
+
 ## Планы
 
 - [x] Простой текстовый протокол (работа через telnet)
