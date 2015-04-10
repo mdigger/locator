@@ -8,19 +8,6 @@ import (
 	"strings"
 )
 
-// Поддерживаемые команды
-const (
-	CONNECT    = "CONNECT"
-	DISCONNECT = "DISCONNECT"
-	STATUS     = "STATUS"
-	INFO       = "INFO"
-	PING       = "PING"
-	PONG       = "PONG"
-	OK         = "OK"
-	ERROR      = "ERROR"
-	SHUTDOWN   = "SHUTDOWN"
-)
-
 // Conn описывает информацию о подключенном к серверу клиенте.
 type Conn struct {
 	server *Server
