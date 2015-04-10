@@ -120,8 +120,8 @@ func (srv *Server) servConn(conn net.Conn) {
 		addr   = conn.RemoteAddr().String() // адрес удаленного сервера
 		id     string                       // уникальный идентификатор соединения
 	)
-	srv.logf("-> %s", addr)       // выводим информацию об установленно соединении
-	defer srv.logf("<- %s", addr) // выводим информацию о закрытии соединения
+	srv.logf("%s <- connected", addr)          // выводим информацию об установленно соединении
+	defer srv.logf("%s -> disconnected", addr) // выводим информацию о закрытии соединения
 	// читаем команды до тех пор, пока соединение не будет закрыто
 	for {
 		conn.SetDeadline(time.Now().Add(srv.Duration)) // устанавливаем время жизни по умолчанию
@@ -143,42 +143,42 @@ func (srv *Server) servConn(conn net.Conn) {
 			param = strings.TrimSpace(splits[1]) // сохраняем параметр, если он есть
 		}
 		// обрабатываем команды
-		srv.logf("?> %s %s %s", addr, cmd, param) // выводим информацию о запросе
+		srv.logf("%s %s %s", addr, cmd, param) // выводим информацию о запросе
 		switch cmd {
 		case CONNECT: // подключение
 			if id == "" {
 				if param != "" {
 					id = param
 					srv.connections.Add(id, addr)
-					fmt.Fprintln(conn, OK, "Connected")
+					fmt.Fprintln(conn, cmd, OK, addr)
 				} else {
-					fmt.Fprintln(conn, ERROR, "Empty id")
+					fmt.Fprintln(conn, cmd, ERROR, "Empty id")
 				}
 			} else {
-				fmt.Fprintln(conn, ERROR, "Already connected")
+				fmt.Fprintln(conn, cmd, ERROR, "Already connected")
 			}
 		case STATUS: // изменение текста статуса
 			if id != "" {
 				srv.connections.SetStatus(id, param)
-				fmt.Fprintln(conn, OK, "Status changed")
+				fmt.Fprintln(conn, cmd, OK, param)
 			} else {
-				fmt.Fprintln(conn, ERROR, "Not connected")
+				fmt.Fprintln(conn, cmd, ERROR, "Not connected")
 			}
 		case INFO: // запрос информации о соединении
 			if info := srv.connections.Info(param); info != nil &&
 				time.Since(info.updated) < srv.Duration {
-				fmt.Fprintln(conn, INFO, param, info.String())
+				fmt.Fprintln(conn, cmd, OK, param, info.String())
 			} else {
-				fmt.Fprintln(conn, OK, "Not found", param)
+				fmt.Fprintln(conn, cmd, OK, param, "Not found")
 			}
 		case PING: // поддержка соединения
-			fmt.Fprintln(conn, PONG, param)
+			fmt.Fprintln(conn, cmd, OK, param)
 		case DISCONNECT: // закрытие соединения
-			fmt.Fprintln(conn, OK, "Disconnected")
+			fmt.Fprintln(conn, cmd, OK)
 			conn.Close() // закрываем соединение
 			return       // больше нечего делать
 		default: // неизвестная команда
-			fmt.Fprintln(conn, OK, "Ignored command", cmd)
+			fmt.Fprintln(conn, cmd, ERROR, "Unknown command")
 		}
 	}
 }

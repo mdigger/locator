@@ -4,46 +4,57 @@
 
 Для соединения с сервером используется порт `9000`. На данный момент поддерживаются следующие команды:
 
-- `CONNECT client_id` - сохраняет текущий адрес соединения под указанным именем. Команда может быть выполнена в любой момент, но только один раз. Повторное выполнение команды вернет ошибку.
-- `STATUS text` - позволяет задать произвольный текст в виде статуса.
-- `INFO client_id` - возвращает информацию о соединении с таким именем. Возвращается название, IP-адрес и порт, дата и время последнего обновления информации, текст статуса.
-- `PING text` - возвращает ответ `PONG` с тем же текстом.
+- `CONNECT [client_id]` - сохраняет текущий адрес соединения под указанным именем. Команда может быть выполнена в любой момент, но только один раз. Повторное выполнение команды вернет ошибку.
+- `STATUS [text]` - позволяет задать произвольный текст в виде статуса.
+- `INFO [client_id]` - возвращает информацию о соединении с таким именем. Возвращается название, IP-адрес и порт, дата и время последнего обновления информации, текст статуса.
+- `PING [text]` - возвращает ответ `PONG` с тем же текстом.
 - `DISCONNECT` - закрывает текущее соединение. Информация об этом соединении будет доступна еще в течении 5 минут.
 - любые другие команды не приводят к ошибке и возвращают ответ, что команда проигнорирована.
 
-Соединение автоматически разрывается, если в течении 5 минут не было передано ни одной команды. Любая команда (даже неверная) устанавливает время обновления информации о соединении в текущее. Регистр команд неважен, а вот идентификатор соединения является чувствительным к регистру.
+#### Примечания
 
+- Ответ всегда в формате: `Имя_команды` `Статус` `Дополнительная информация`. Статус может быть `OK` или `ERROR`.
+- Соединение автоматически разрывается, если в течении 5 минут не было передано ни одной команды. 
+- Любая команда (даже неверная) устанавливает время обновления информации о соединении в текущее. 
+- Регистр команд неважен, а вот идентификатор соединения является чувствительным к регистру. 
+- Время всегда возвращается в формате RFC3339 в UTC.
 
-	$ telnet localhost 9000
+#### Пример работы через telnet
+
+	telnet localhost 9000
 	Trying 127.0.0.1...
 	Connected to localhost.
 	Escape character is '^]'.
-	connect test
-	OK Connected
-	status my status text
-	OK Status changed
-	ping text
-	PONG text
-	info test
-	INFO test 127.0.0.1:49731 2015-04-10T23:06:35Z my status text
-	disconnect
-	OK Disconnected
+	CONNECT test_id
+	CONNECT OK 127.0.0.1:57554
+	STATUS text status
+	STATUS OK text status
+	INFO
+	INFO OK  Not found
+	INFO test_id
+	INFO OK test_id 127.0.0.1:57554 2015-04-10T23:30:01Z text status
+	PING test ping
+	PING OK test ping
+	DISCONNECT
+	DISCONNECT OK
 	Connection closed by foreign host.
 
-	$ telnet localhost 9000
+	telnet localhost 9000
 	Trying 127.0.0.1...
 	Connected to localhost.
 	Escape character is '^]'.
-	info test
-	INFO test 127.0.0.1:49731 2015-04-10T23:08:40Z my status text
-	test
-	OK Ignored command TEST
-	connect
-	ERROR Empty id
-	connect test
-	OK Connected
-	info test
-	INFO test 127.0.0.1:50362 2015-04-10T23:13:54Z
+	INFO test_id
+	INFO OK test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
+	STATUS text status
+	STATUS ERROR Not connected
+	TEST command
+	TEST ERROR Unknown command
+	INFO test_id
+	INFO OK test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
+	DISCONNECT
+	DISCONNECT OK
+	Connection closed by foreign host.
+
 
 ## Планы
 
