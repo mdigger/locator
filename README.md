@@ -29,13 +29,21 @@
 	disconnect
 	OK Disconnected
 	Connection closed by foreign host.
+
 	$ telnet localhost 9000
 	Trying 127.0.0.1...
 	Connected to localhost.
 	Escape character is '^]'.
 	info test
 	INFO test 127.0.0.1:49731 2015-04-10T23:08:40Z my status text
-
+	test
+	OK Ignored command TEST
+	connect
+	ERROR Empty id
+	connect test
+	OK Connected
+	info test
+	INFO test 127.0.0.1:50362 2015-04-10T23:13:54Z
 
 ## Планы
 
