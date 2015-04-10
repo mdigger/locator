@@ -150,35 +150,35 @@ func (srv *Server) servConn(conn net.Conn) {
 				if param != "" {
 					id = param
 					srv.connections.Add(id, addr)
-					fmt.Fprintln(conn, cmd, OK, addr)
+					fmt.Fprintln(conn, OK, cmd, id, addr)
 				} else {
-					fmt.Fprintln(conn, cmd, ERROR, "Empty id")
+					fmt.Fprintln(conn, ERROR, cmd, "empty id")
 				}
 			} else {
-				fmt.Fprintln(conn, cmd, ERROR, "Already connected")
+				fmt.Fprintln(conn, ERROR, cmd, "already connected")
 			}
 		case STATUS: // изменение текста статуса
 			if id != "" {
 				srv.connections.SetStatus(id, param)
-				fmt.Fprintln(conn, cmd, OK, param)
+				fmt.Fprintln(conn, OK, cmd, param)
 			} else {
-				fmt.Fprintln(conn, cmd, ERROR, "Not connected")
+				fmt.Fprintln(conn, ERROR, cmd, "not connected")
 			}
 		case INFO: // запрос информации о соединении
 			if info := srv.connections.Info(param); info != nil &&
 				time.Since(info.updated) < srv.Duration {
-				fmt.Fprintln(conn, cmd, OK, param, info.String())
+				fmt.Fprintln(conn, OK, cmd, param, info.String())
 			} else {
-				fmt.Fprintln(conn, cmd, OK, param, "Not found")
+				fmt.Fprintln(conn, ERROR, cmd, param, "not found")
 			}
 		case PING: // поддержка соединения
-			fmt.Fprintln(conn, cmd, OK, param)
+			fmt.Fprintln(conn, OK, cmd, param)
 		case DISCONNECT: // закрытие соединения
-			fmt.Fprintln(conn, cmd, OK)
+			fmt.Fprintln(conn, OK, cmd)
 			conn.Close() // закрываем соединение
 			return       // больше нечего делать
 		default: // неизвестная команда
-			fmt.Fprintln(conn, cmd, ERROR, "Unknown command")
+			fmt.Fprintln(conn, ERROR, cmd, "unknown command")
 		}
 	}
 }

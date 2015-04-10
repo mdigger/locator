@@ -13,7 +13,8 @@
 
 #### Примечания
 
-- Ответ всегда в формате: `Имя_команды` `Статус` `Дополнительная информация`. Статус может быть `OK` или `ERROR`.
+- Ответ всегда в формате: `Статус` `Команда` `Дополнительная информация`.  
+  Статус может быть `OK` или `ERROR`. Команда всегда повторяет переданную.
 - Соединение автоматически разрывается, если в течении 5 минут не было передано ни одной команды. 
 - Любая команда (даже неверная) устанавливает время обновления информации о соединении в текущее. 
 - Регистр команд неважен, а вот идентификатор соединения является чувствительным к регистру. 
@@ -26,17 +27,17 @@
 	Connected to localhost.
 	Escape character is '^]'.
 	CONNECT test_id
-	CONNECT OK 127.0.0.1:57554
+	OK CONNECT test_id 127.0.0.1:57554
 	STATUS text status
-	STATUS OK text status
-	INFO
-	INFO OK  Not found
+	OK STATUS text status
+	INFO a
+	ERROR INFO a not found
 	INFO test_id
-	INFO OK test_id 127.0.0.1:57554 2015-04-10T23:30:01Z text status
+	OK INFO test_id 127.0.0.1:57554 2015-04-10T23:30:01Z text status
 	PING test ping
-	PING OK test ping
+	OK PING test ping
 	DISCONNECT
-	DISCONNECT OK
+	OK DISCONNECT
 	Connection closed by foreign host.
 
 	telnet localhost 9000
@@ -44,15 +45,15 @@
 	Connected to localhost.
 	Escape character is '^]'.
 	INFO test_id
-	INFO OK test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
+	OK INFO test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
 	STATUS text status
-	STATUS ERROR Not connected
+	ERROR STATUS not connected
 	TEST command
-	TEST ERROR Unknown command
+	ERROR TEST unknown command
 	INFO test_id
-	INFO OK test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
+	OK INFO test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
 	DISCONNECT
-	DISCONNECT OK
+	OK DISCONNECT
 	Connection closed by foreign host.
 
 
