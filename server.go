@@ -3,18 +3,24 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"fmt"
 	"log"
 	"net"
 	"strings"
 	"time"
 )
 
+const (
+	DefaultDuration = 5 * time.Minute // время жизни по умолчанию.
+)
+
 // Server описывает серверные подключения клиентов.
 type Server struct {
-	Addr        string      // TCP-адрес и порт сервера
-	TLSConfig   *tls.Config // опциональная  конфигурация TLS, которая используется ListenAndServeTLS
-	ErrorLog    *log.Logger // вывод лога (если не определен, то используется стандартный)
-	connections list        // информация об установленных соединениях
+	Addr        string        // TCP-адрес и порт сервера
+	Duration    time.Duration // время жизни неактивного соединения
+	TLSConfig   *tls.Config   // конфигурация TLS, которая используется ListenAndServeTLS
+	ErrorLog    *log.Logger   // вывод лога (если не определен, то используется стандартный)
+	connections *List         // информация об установленных соединениях
 }
 
 // logf выводит информацию в лог.
@@ -67,6 +73,13 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 
 // Serve принимает входящее соединение и запускает в отдельном потоке его обработку.
 func (srv *Server) Serve(l net.Listener) error {
+	srv.logf("Listen %s...", srv.Addr)
+	if srv.Duration == 0 {
+		srv.Duration = DefaultDuration // по умолчанию время жизни -- 5 минут
+	}
+	if srv.connections == nil {
+		srv.connections = NewList(srv.Duration) // инициализируем хранилище информации о соединениях
+	}
 	var tempDelay time.Duration // задержка до возврата ошибки
 	for {
 		conn, err := l.Accept()
@@ -102,7 +115,6 @@ const (
 	PONG       = "PONG"
 	OK         = "OK"
 	ERROR      = "ERROR"
-	SHUTDOWN   = "SHUTDOWN"
 )
 
 // servConn обрабатывает удаленное соединение.
@@ -115,7 +127,11 @@ func (srv *Server) servConn(conn net.Conn) {
 	// читаем команды до тех пор, пока соединение не будет закрыто
 	for {
 		message, err := reader.ReadString('\n') // читаем команду до конца строки
+		if id != "" {
+			srv.connections.Update(id) // обновляем время последней активности клиента
+		}
 		if err != nil {
+			conn.Close() // закрываем соединение после любой ошибки
 			return
 		}
 		message = strings.TrimSpace(message) // избавляемся от лишних пробелов
@@ -125,55 +141,44 @@ func (srv *Server) servConn(conn net.Conn) {
 			param  string                            // параметр
 		)
 		if len(splits) > 1 {
-			param = splits[1] // сохраняем параметр, если он есть
+			param = strings.TrimSpace(splits[1]) // сохраняем параметр, если он есть
 		}
 		// обрабатываем команды
 		switch cmd {
-		case CONNECT:
+		case CONNECT: // подключение
+			if id == "" {
+				if param != "" {
+					id = param
+					srv.connections.Add(id, addr)
+					fmt.Fprintln(conn, OK, "Connected")
+				} else {
+					fmt.Fprintln(conn, ERROR, "Empty id")
+				}
+			} else {
+				fmt.Fprintln(conn, ERROR, "Already connected")
+			}
+		case STATUS: // изменение текста статуса
+			if id != "" {
+				srv.connections.SetStatus(id, param)
+				fmt.Fprintln(conn, OK, "Status changed")
+			} else {
+				fmt.Fprintln(conn, ERROR, "Not connected")
+			}
+		case INFO: // запрос информации о соединении
+			if info := srv.connections.Info(param); info != nil &&
+				time.Since(info.updated) < srv.Duration {
+				fmt.Fprintln(conn, OK, INFO, param, info.String())
+			} else {
+				fmt.Fprintln(conn, OK, "Not found", param)
+			}
+		case PING: // поддержка соединения
+			fmt.Fprintln(conn, OK, PONG, param)
+		case DISCONNECT: // закрытие соединения
+			fmt.Fprintln(conn, OK, "Disconnected")
+			conn.Close() // закрываем соединение
+			return       // больше нечего делать
+		default: // неизвестная команда
+			fmt.Fprintln(conn, OK, "Ignored command", cmd)
 		}
 	}
-
-	// var connection = &Conn{
-	// 	server: srv,
-	// 	conn:   conn,
-	// 	addr:   conn.RemoteAddr().String(),
-	// 	reader: bufio.NewReader(conn),
-	// }
-
-	// var cmd, params, err = connection.Read()
-	// if err != nil {
-	// 	conn.Close()
-	// 	return nil, err
-	// }
-	// if cmd != CONNECT {
-	// 	connection.Send(DISCONNECT, "Incorrect CONNECT command")
-	// 	conn.Close()
-	// 	return nil, errors.New("incorrect connect command")
-	// }
-	// if idx := strings.IndexRune(params, ' '); idx > 0 {
-	// 	connection.id = params[:idx]
-	// 	connection.status = params[idx:]
-	// } else {
-	// 	connection.id = params
-	// }
-	// if connection.id == "" {
-	// 	connection.Send(DISCONNECT, "Empty CONNECT client_id")
-	// 	conn.Close()
-	// 	return nil, errors.New("empty client_id")
-	// }
-	// srv.mu.Lock()
-	// if srv.connections == nil {
-	// 	srv.connections = make(map[string]*Conn)
-	// }
-	// if _, ok := srv.connections[connection.id]; ok {
-	// 	connection.Send(DISCONNECT, fmt.Sprintf("Client with id %q already connected", connection.id))
-	// 	conn.Close()
-	// 	srv.mu.Unlock()
-	// 	return nil, errors.New("duplicate client_id")
-	// }
-	// srv.connections[connection.id] = connection
-	// srv.logf("Connect: %s [%s]", connection.id, connection.addr)
-	// srv.mu.Unlock()
-	// connection.Send(OK, "Connected")
-	// return connection, nil
 }

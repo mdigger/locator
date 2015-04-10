@@ -9,8 +9,8 @@ import (
 // ConnInfo описывает информацию о соединении.
 type ConnInfo struct {
 	addr    string    // IP-адрес и порт
-	status  string    // строка со статусом
 	updated time.Time // дата и время последнего обновления информации
+	status  string    // строка со статусом
 }
 
 // NewConnInfo возвращает новую информацию о соединении.
@@ -44,10 +44,7 @@ type List struct {
 
 // NewList инициализирует и возвращает новый список с информацией о соединениях.
 func NewList(d time.Duration) *List {
-	var list = &List{
-		connections: make(map[string]*ConnInfo),
-		commands:    make(chan *Command, 1000),
-	}
+	var list = &List{connections: make(map[string]*ConnInfo)}
 	// периодически очищаем информацию с устаревшими данными
 	go func() {
 		time.Sleep(d)
@@ -97,11 +94,9 @@ func (l *List) Remove(id string) {
 }
 
 // Info возвращает информацию о соединении.
-func (l *List) Info(id string) (info string) {
+func (l *List) Info(id string) *ConnInfo {
 	l.mu.RLock()
-	if ci, ok := l.connections[id]; ok {
-		info = ci.String()
-	}
+	var ci = l.connections[id]
 	l.mu.RUnlock()
-	return info
+	return ci
 }
