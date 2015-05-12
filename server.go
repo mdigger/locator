@@ -207,7 +207,7 @@ func (srv *Server) servConn(conn net.Conn) {
 				fmt.Fprintln(conn, ERROR, cmd, err.Error())
 				continue
 			}
-			if err := fmt.Fprintln(to, "FROM", id); err != nil {
+			if _, err := fmt.Fprintln(to, "FROM", id); err != nil {
 				fmt.Fprintln(conn, ERROR, cmd, err.Error())
 				continue
 			}
