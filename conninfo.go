@@ -8,21 +8,21 @@ import (
 
 // ConnInfo описывает информацию о соединении.
 type ConnInfo struct {
-	addr    string    // IP-адрес и порт
-	updated time.Time // дата и время последнего обновления информации
-	status  string    // строка со статусом
+	addr, addr2 string    // IP-адрес и порт
+	updated     time.Time // дата и время последнего обновления информации
+	status      string    // строка со статусом
 }
 
 // NewConnInfo возвращает новую информацию о соединении.
-func NewConnInfo(addr string) *ConnInfo {
-	var ci = &ConnInfo{addr: addr}
+func NewConnInfo(addr, addr2 string) *ConnInfo {
+	var ci = &ConnInfo{addr: addr, addr2: addr2}
 	ci.Update()
 	return ci
 }
 
 // String возвращает строковое представление информации о соединении.
 func (ci *ConnInfo) String() string {
-	return fmt.Sprintf("%s %s %s", ci.addr, ci.updated.UTC().Format(time.RFC3339), ci.status)
+	return fmt.Sprintf("%s %s %s %s", ci.addr, ci.addr2, ci.updated.UTC().Format(time.RFC3339), ci.status)
 }
 
 // SetStatus задает новый текст статуса.
@@ -61,9 +61,9 @@ func NewList(d time.Duration) *List {
 }
 
 // Add добавляет новую информацию о соединении.
-func (l *List) Add(id, addr string) {
+func (l *List) Add(id, addr, addr2 string) {
 	l.mu.Lock()
-	l.connections[id] = NewConnInfo(addr)
+	l.connections[id] = NewConnInfo(addr, addr2)
 	l.mu.Unlock()
 }
 

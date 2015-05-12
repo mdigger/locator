@@ -156,13 +156,14 @@ func (srv *Server) servConn(conn net.Conn) {
 		case CONNECT: // подключение
 			if id == "" {
 				if param != "" {
+					var addr2 string
 					if idx := strings.IndexRune(param, ' '); idx > 1 {
 						id = param[:idx]
-						addr = param[idx:]
+						addr2 = param[idx:]
 					} else {
 						id = param
 					}
-					srv.connections.Add(id, addr)
+					srv.connections.Add(id, addr, addr2)
 					fmt.Fprintln(conn, OK, cmd, id, addr)
 					srv.senders[id] = conn
 				} else {

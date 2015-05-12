@@ -35,7 +35,7 @@
 	INFO a
 	ERROR INFO a not found
 	INFO test_id
-	OK INFO test_id 127.0.0.1:57554 2015-04-10T23:30:01Z text status
+	OK INFO test_id 127.0.0.1:57554 127.0.0.1:57554 2015-04-10T23:30:01Z text status
 	PING test ping
 	OK PING test ping
 	DISCONNECT
@@ -47,13 +47,13 @@
 	Connected to localhost.
 	Escape character is '^]'.
 	INFO test_id
-	OK INFO test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
+	OK INFO test_id 127.0.0.1:57554 127.0.0.1:57554 2015-04-10T23:30:39Z text status
 	STATUS text status
 	ERROR STATUS not connected
 	TEST command
 	ERROR TEST unknown command
 	INFO test_id
-	OK INFO test_id 127.0.0.1:57554 2015-04-10T23:30:39Z text status
+	OK INFO test_id 127.0.0.1:57554 127.0.0.1:57554 2015-04-10T23:30:39Z text status
 	DISCONNECT
 	OK DISCONNECT
 	Connection closed by foreign host.
