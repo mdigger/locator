@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strings"
@@ -17,6 +19,7 @@ type Server struct {
 	TLSConfig   *tls.Config   // конфигурация TLS, которая используется ListenAndServeTLS
 	ErrorLog    *log.Logger   // вывод лога (если не определен, то используется стандартный)
 	connections *List         // информация об установленных соединениях
+	senders     map[string]net.Conn
 }
 
 // logf выводит информацию в лог.
@@ -77,6 +80,9 @@ func (srv *Server) Serve(l net.Listener) error {
 		srv.connections = NewList(srv.Duration) // инициализируем хранилище информации о соединениях
 	}
 	var tempDelay time.Duration // задержка до возврата ошибки
+	if srv.senders == nil {
+		srv.senders = make(map[string]net.Conn)
+	}
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -111,6 +117,7 @@ const (
 	PONG       = "PONG"
 	OK         = "OK"
 	ERROR      = "ERROR"
+	TO         = "TO"
 )
 
 // servConn обрабатывает удаленное соединение.
@@ -130,6 +137,7 @@ func (srv *Server) servConn(conn net.Conn) {
 			srv.connections.Update(id) // обновляем время последней активности клиента
 		}
 		if err != nil {
+			delete(srv.senders, id)
 			conn.Close() // закрываем соединение после любой ошибки
 			return
 		}
@@ -156,6 +164,7 @@ func (srv *Server) servConn(conn net.Conn) {
 					}
 					srv.connections.Add(id, addr)
 					fmt.Fprintln(conn, OK, cmd, id, addr)
+					srv.senders[id] = conn
 				} else {
 					fmt.Fprintln(conn, ERROR, cmd, "empty id")
 				}
@@ -180,8 +189,37 @@ func (srv *Server) servConn(conn net.Conn) {
 			fmt.Fprintln(conn, OK, cmd, param)
 		case DISCONNECT: // закрытие соединения
 			fmt.Fprintln(conn, OK, cmd)
+			delete(srv.senders, id)
 			conn.Close() // закрываем соединение
 			return       // больше нечего делать
+		case TO:
+			if param == "" {
+				fmt.Fprintln(conn, ERROR, cmd, "empty TO")
+				continue
+			}
+			to, ok := srv.senders[param]
+			if !ok || to == nil {
+				fmt.Fprintln(conn, ERROR, cmd, param, "not connected")
+				continue
+			}
+			var length int32
+			if err := binary.Read(conn, binary.BigEndian, length); err != nil {
+				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+				continue
+			}
+			if err := fmt.Fprintln(to, "FROM", id); err != nil {
+				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+				continue
+			}
+			if err := binary.Write(to, binary.BigEndian, length); err != nil {
+				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+				continue
+			}
+			if _, err := io.CopyN(to, conn, int64(length-4)); err != nil {
+				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+				continue
+			}
+			srv.logf("transform from %s %s completed", id, param)
 		default: // неизвестная команда
 			fmt.Fprintln(conn, ERROR, cmd, "unknown command")
 		}
