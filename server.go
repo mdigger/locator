@@ -220,7 +220,7 @@ func (srv *Server) servConn(conn net.Conn) {
 				fmt.Fprintln(conn, ERROR, cmd, err.Error())
 				continue
 			}
-			srv.logf("transform from %s %s completed", id, param)
+			srv.logf("transform from %s to %s completed", id, param)
 		default: // неизвестная команда
 			fmt.Fprintln(conn, ERROR, cmd, "unknown command")
 		}
