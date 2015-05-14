@@ -15,6 +15,9 @@ type ConnInfo struct {
 
 // NewConnInfo возвращает новую информацию о соединении.
 func NewConnInfo(addr, addr2 string) *ConnInfo {
+	if addr2 == "" {
+		addr2 = "0.0.0.0:0"
+	}
 	var ci = &ConnInfo{addr: addr, addr2: addr2}
 	ci.Update()
 	return ci
