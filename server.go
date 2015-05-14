@@ -137,6 +137,7 @@ func (srv *Server) servConn(conn net.Conn) {
 			srv.connections.Update(id) // обновляем время последней активности клиента
 		}
 		if err != nil {
+			srv.logf("DELETED: %s", id)
 			delete(srv.senders, id)
 			conn.Close() // закрываем соединение после любой ошибки
 			return
@@ -166,6 +167,7 @@ func (srv *Server) servConn(conn net.Conn) {
 					srv.connections.Add(id, addr, addr2)
 					fmt.Fprintln(conn, OK, cmd, id, addr)
 					srv.senders[id] = conn
+					srv.logf("ADD: %s", id)
 				} else {
 					fmt.Fprintln(conn, ERROR, cmd, "empty id")
 				}
@@ -190,35 +192,47 @@ func (srv *Server) servConn(conn net.Conn) {
 			fmt.Fprintln(conn, OK, cmd, param)
 		case DISCONNECT: // закрытие соединения
 			fmt.Fprintln(conn, OK, cmd)
+			srv.logf("DELETED: %s", id)
 			delete(srv.senders, id)
 			conn.Close() // закрываем соединение
 			return       // больше нечего делать
 		case TO:
+			srv.logf("FROM: %s", id)
 			if param == "" {
 				fmt.Fprintln(conn, ERROR, cmd, "empty TO")
 				continue
 			}
+			srv.logf("TO: %s", param)
 			to, ok := srv.senders[param]
 			if !ok || to == nil {
+				srv.logf("TO: Error %s", "not connected")
 				fmt.Fprintln(conn, ERROR, cmd, param, "not connected")
 				continue
 			}
+			srv.logf("Sender found")
 			var length int32
-			if err := binary.Read(conn, binary.BigEndian, length); err != nil {
+			if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
+				srv.logf("TO: Error %s %s", "length read", err.Error())
 				fmt.Fprintln(conn, ERROR, cmd, err.Error())
 				continue
 			}
+			srv.logf("TO: Length %d", length)
 			if _, err := fmt.Fprintln(to, "FROM", id); err != nil {
+				srv.logf("TO: Error %s %s", "from send", err.Error())
 				fmt.Fprintln(conn, ERROR, cmd, err.Error())
 				continue
 			}
-			if err := binary.Write(to, binary.BigEndian, length); err != nil {
+			if err := binary.Write(to, binary.LittleEndian, length); err != nil {
+				srv.logf("TO: Error %s %s", "length send", err.Error())
 				fmt.Fprintln(conn, ERROR, cmd, err.Error())
 				continue
 			}
-			if _, err := io.CopyN(to, conn, int64(length-4)); err != nil {
+			if n, err := io.CopyN(to, reader, int64(length-4)); err != nil {
+				srv.logf("TO: Error copy %s", err.Error())
 				fmt.Fprintln(conn, ERROR, cmd, err.Error())
 				continue
+			} else {
+				srv.logf("TO: Length send %d", n)
 			}
 			srv.logf("transform from %s to %s completed", id, param)
 		default: // неизвестная команда
