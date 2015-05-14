@@ -238,6 +238,7 @@ func (srv *Server) servConn(conn net.Conn) {
 				reader.Reset(conn)
 				continue
 			} else {
+				fmt.Fprintln(conn, OK, cmd, param)
 				srv.logf("TO: Sended %d", n)
 			}
 			srv.logf("transform from %s to %s completed", id, param)
