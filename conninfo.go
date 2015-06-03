@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"sync"
 	"time"
 )
@@ -11,14 +12,15 @@ type ConnInfo struct {
 	addr, addr2 string    // IP-адрес и порт
 	updated     time.Time // дата и время последнего обновления информации
 	status      string    // строка со статусом
+	conn        net.Conn  // сокетное соединение
 }
 
 // NewConnInfo возвращает новую информацию о соединении.
-func NewConnInfo(addr, addr2 string) *ConnInfo {
+func NewConnInfo(conn net.Conn, addr, addr2 string) *ConnInfo {
 	if addr2 == "" {
 		addr2 = "0.0.0.0:0"
 	}
-	var ci = &ConnInfo{addr: addr, addr2: addr2}
+	var ci = &ConnInfo{addr: addr, addr2: addr2, conn: conn}
 	ci.Update()
 	return ci
 }
@@ -46,27 +48,29 @@ type List struct {
 }
 
 // NewList инициализирует и возвращает новый список с информацией о соединениях.
-func NewList(d time.Duration) *List {
-	var list = &List{connections: make(map[string]*ConnInfo)}
-	// периодически очищаем информацию с устаревшими данными
-	go func() {
-		time.Sleep(d + d/2) // полуторный интервал задержки с очисткой
-		var lastValid = time.Now().Add(-d)
-		list.mu.Lock()
-		for id, ci := range list.connections {
-			if ci.updated.After(lastValid) {
-				delete(list.connections, id)
-			}
-		}
-		list.mu.Unlock()
-	}()
-	return list
+func NewList() *List {
+	return &List{
+		connections: make(map[string]*ConnInfo),
+	}
+	// // периодически очищаем информацию с устаревшими данными
+	// go func() {
+	// 	time.Sleep(d + d/2) // полуторный интервал задержки с очисткой
+	// 	var lastValid = time.Now().Add(-d)
+	// 	list.mu.Lock()
+	// 	for id, ci := range list.connections {
+	// 		if ci.updated.After(lastValid) {
+	// 			delete(list.connections, id)
+	// 		}
+	// 	}
+	// 	list.mu.Unlock()
+	// }()
+	// return list
 }
 
 // Add добавляет новую информацию о соединении.
-func (l *List) Add(id, addr, addr2 string) {
+func (l *List) Add(conn net.Conn, id, addr, addr2 string) {
 	l.mu.Lock()
-	l.connections[id] = NewConnInfo(addr, addr2)
+	l.connections[id] = NewConnInfo(conn, addr, addr2)
 	l.mu.Unlock()
 }
 
