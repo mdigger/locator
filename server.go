@@ -31,7 +31,7 @@ func NewServer(connections *List) *Server {
 // ListenAndServe запускает сервер. Если адрес сервера не указан, то используется порт :9000
 func (srv *Server) ListenAndServe() error {
 	if srv.Addr == "" {
-		srv.Addr = ":9010"
+		srv.Addr = ":9000"
 	}
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
@@ -44,7 +44,7 @@ func (srv *Server) ListenAndServe() error {
 // порт :9001
 func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	if srv.Addr == "" {
-		srv.Addr = ":9011"
+		srv.Addr = ":9001"
 	}
 	config := &tls.Config{}
 

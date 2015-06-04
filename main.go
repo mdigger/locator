@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.Ltime | log.Lshortfile)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	var list = NewList() // инициализируем список соединений
 	go func() {
 		var server = NewServer(list)
