@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"crypto/tls"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -12,28 +11,27 @@ import (
 	"time"
 )
 
+var timeout = time.Duration(2 * time.Minute)
+
 // Server описывает серверные подключения клиентов.
 type Server struct {
-	Addr        string        // TCP-адрес и порт сервера
-	Duration    time.Duration // время жизни неактивного соединения (по умолчанию 5 минут)
-	TLSConfig   *tls.Config   // конфигурация TLS, которая используется ListenAndServeTLS
-	ErrorLog    *log.Logger   // вывод лога (если не определен, то используется стандартный)
-	connections *List         // информация об установленных соединениях
+	Addr        string // TCP-адрес и порт сервера
+	connections *List  // информация об установленных соединениях
 }
 
-// logf выводит информацию в лог.
-func (srv *Server) logf(format string, args ...interface{}) {
-	if srv.ErrorLog != nil {
-		srv.ErrorLog.Printf(format, args...)
-	} else {
-		log.Printf(format, args...)
+func NewServer(connections *List) *Server {
+	if connections == nil {
+		connections = NewList() // инициализируем хранилище информации о соединениях
+	}
+	return &Server{
+		connections: connections,
 	}
 }
 
 // ListenAndServe запускает сервер. Если адрес сервера не указан, то используется порт :9000
 func (srv *Server) ListenAndServe() error {
 	if srv.Addr == "" {
-		srv.Addr = ":9000"
+		srv.Addr = ":9010"
 	}
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
@@ -46,12 +44,9 @@ func (srv *Server) ListenAndServe() error {
 // порт :9001
 func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	if srv.Addr == "" {
-		srv.Addr = ":9001"
+		srv.Addr = ":9011"
 	}
 	config := &tls.Config{}
-	if srv.TLSConfig != nil {
-		*config = *srv.TLSConfig
-	}
 
 	var err error
 	config.Certificates = make([]tls.Certificate, 1)
@@ -71,17 +66,11 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 
 // Serve принимает входящее соединение и запускает в отдельном потоке его обработку.
 func (srv *Server) Serve(l net.Listener) error {
-	srv.logf("Listen %s...", srv.Addr)
-	if srv.Duration < 30*time.Second {
-		srv.Duration = 5 * time.Minute // по умолчанию время жизни -- 5 минут
-	}
+	log.Printf("Listen %s...", srv.Addr)
 	if srv.connections == nil {
 		srv.connections = NewList() // инициализируем хранилище информации о соединениях
 	}
 	var tempDelay time.Duration // задержка до возврата ошибки
-	// if srv.senders == nil {
-	// 	srv.senders = make(map[string]net.Conn)
-	// }
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -94,7 +83,7 @@ func (srv *Server) Serve(l net.Listener) error {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				srv.logf("Accept error: %v; retrying in %v", err, tempDelay)
+				log.Printf("Accept error: %v; retrying in %v", err, tempDelay)
 				time.Sleep(tempDelay)
 				continue
 			}
@@ -119,6 +108,16 @@ const (
 	TO         = "TO"
 )
 
+func Send(addr string, conn net.Conn, params ...string) error {
+	msg := strings.Join(params, " ") + "\n"
+	log.Printf("%s <- %s", addr, msg)
+	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return err
+	}
+	_, err := io.WriteString(conn, msg)
+	return err
+}
+
 // servConn обрабатывает удаленное соединение.
 func (srv *Server) servConn(conn net.Conn) {
 	var (
@@ -126,23 +125,34 @@ func (srv *Server) servConn(conn net.Conn) {
 		addr   = conn.RemoteAddr().String() // адрес удаленного сервера
 		id     string                       // уникальный идентификатор соединения
 	)
-	srv.logf("%s <- connected", addr)          // выводим информацию об установленно соединении
-	defer srv.logf("%s -> disconnected", addr) // выводим информацию о закрытии соединения
+	log.Printf("%s <- connected", addr) // выводим информацию об установленно соединении
+	defer func() {
+		if id != "" {
+			srv.connections.Remove(id)
+		}
+		conn.Close()                                  // закрываем соединение после любой ошибки
+		log.Printf("%s -> disconnected %q", addr, id) // выводим информацию о закрытии соединения
+		log.Println("!:", srv.connections.List())
+	}()
 	// читаем команды до тех пор, пока соединение не будет закрыто
 	for {
-		conn.SetDeadline(time.Now().Add(srv.Duration)) // устанавливаем время жизни по умолчанию
-		message, err := reader.ReadString('\n')        // читаем команду до конца строки
+		if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+			log.Println(addr, "ERROR:", err.Error())
+			return
+		}
+		message, err := reader.ReadString('\n') // читаем команду до конца строки
+		if err != nil {
+			log.Println(addr, "ERROR:", err.Error())
+			return
+		}
 		if id != "" {
 			srv.connections.Update(id) // обновляем время последней активности клиента
 		}
-		if err != nil {
-			srv.logf("DELETED: %s", id)
-			srv.connections.Remove(id)
-			// delete(srv.senders, id)
-			conn.Close() // закрываем соединение после любой ошибки
-			return
+		if len(message) > 256 {
+			continue // игнорируем слишком длинные заголовки
 		}
-		message = strings.TrimSpace(message) // избавляемся от лишних пробелов
+		message = strings.TrimSpace(message)  // избавляемся от лишних пробелов
+		log.Printf("%s -> %s", addr, message) // выводим информацию о запросе
 		var (
 			splits = strings.SplitN(message, " ", 2) // отделяем команду от параметров
 			cmd    = strings.ToUpper(splits[0])      // приводим команду к верхнему регистру
@@ -152,10 +162,8 @@ func (srv *Server) servConn(conn net.Conn) {
 			param = strings.TrimSpace(splits[1]) // сохраняем параметр, если он есть
 		}
 		// обрабатываем команды
-		srv.logf("%s %s %s", addr, cmd, param) // выводим информацию о запросе
 		switch cmd {
 		case CONNECT: // подключение
-			// if id == "" {
 			if param != "" {
 				var addr2 string
 				if idx := strings.IndexRune(param, ' '); idx > 1 {
@@ -165,93 +173,133 @@ func (srv *Server) servConn(conn net.Conn) {
 					id = param
 				}
 				srv.connections.Add(conn, id, addr, addr2)
-				fmt.Fprintln(conn, OK, cmd, id, addr)
-				srv.logf("ADD: %s", id)
+				if err := Send(addr, conn, OK, cmd, id, addr); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
+				log.Println("!:", srv.connections.List())
 			} else {
-				fmt.Fprintln(conn, ERROR, cmd, "empty id")
+				if err := Send(addr, conn, ERROR, cmd, "empty id"); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 			}
-			// } else {
-			// 	fmt.Fprintln(conn, ERROR, cmd, "already connected")
-			// }
 		case STATUS: // изменение текста статуса
 			if id != "" {
 				srv.connections.SetStatus(id, param)
-				fmt.Fprintln(conn, OK, cmd, param)
+				if err := Send(addr, conn, OK, cmd, param); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 			} else {
-				fmt.Fprintln(conn, ERROR, cmd, "not connected")
+				if err := Send(addr, conn, ERROR, cmd, "not connected"); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 			}
 		case INFO: // запрос информации о соединении
-			if info := srv.connections.Info(param); info != nil {
-				// &&
-				// 	time.Since(info.updated) < srv.Duration {
-				fmt.Fprintln(conn, OK, cmd, param, info.String())
+			if info := srv.connections.Info(param); info != nil && info.conn != nil && time.Since(info.updated) < timeout {
+				if err := Send(info.addr, info.conn, PING, id); err != nil {
+					log.Println(info.addr, "ERROR:", err.Error())
+					srv.connections.Remove(param)
+					if err := Send(addr, conn, ERROR, cmd, param, "not found"); err != nil {
+						log.Println(addr, "ERROR:", err.Error())
+						return // больше нечего делать
+					}
+					continue
+				}
+				if err := Send(addr, conn, OK, cmd, param, info.String()); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 			} else {
-				fmt.Fprintln(conn, ERROR, cmd, param, "not found")
+				if err := Send(addr, conn, ERROR, cmd, param, "not found"); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 			}
 		case PING: // поддержка соединения
-			fmt.Fprintln(conn, OK, cmd, param)
+			if err := Send(addr, conn, OK, cmd, param); err != nil {
+				log.Println(addr, "ERROR:", err.Error())
+				return // больше нечего делать
+			}
 		case DISCONNECT: // закрытие соединения
-			fmt.Fprintln(conn, OK, cmd)
-			srv.logf("DELETED: %s", id)
-			srv.connections.Remove(id)
-			// delete(srv.senders, id)
-			conn.Close() // закрываем соединение
-			return       // больше нечего делать
+			Send(addr, conn, OK, cmd)
+			return // больше нечего делать
 		case TO:
-			srv.logf("FROM: %s", id)
 			if param == "" {
-				fmt.Fprintln(conn, ERROR, cmd, "empty TO")
+				if err := Send(addr, conn, ERROR, cmd, "empty TO"); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 				reader.Reset(conn)
 				continue
 			}
-			srv.logf("TO: %s", param)
 			to := srv.connections.Info(param)
-			if to == nil || to.conn == nil {
-				srv.logf("TO: Error %s", "not connected")
-				fmt.Fprintln(conn, ERROR, cmd, param, "not connected")
+			if to == nil || to.conn == nil || time.Since(to.updated) > timeout {
+				if err := Send(addr, conn, ERROR, cmd, param, "not connected"); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 				reader.Reset(conn)
 				continue
 			}
-			srv.logf("Sender found")
 			var length int32
 			if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
-				srv.logf("TO: Error %s %s", "length read", err.Error())
-				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+				if err := Send(addr, conn, ERROR, cmd, err.Error()); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 				reader.Reset(conn)
 				continue
 			}
-			srv.logf("TO: Length %d", length-4)
-			if _, err := fmt.Fprintln(to.conn, "FROM", id); err != nil {
-				srv.logf("TO: Error %s %s", "from send", err.Error())
-				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+			// log.Println(addr, "Length %d:", length-4)
+			if err := Send(to.addr, to.conn, "FROM", id); err != nil {
+				if err := Send(addr, conn, ERROR, cmd, err.Error()); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 				reader.Reset(conn)
+				srv.connections.Remove(param)
 				continue
 			}
 			if err := binary.Write(to.conn, binary.LittleEndian, length); err != nil {
-				srv.logf("TO: Error %s %s", "length send", err.Error())
-				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+				if err := Send(addr, conn, ERROR, cmd, err.Error()); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 				reader.Reset(conn)
+				srv.connections.Remove(param)
+				continue
+			}
+			if err := to.conn.SetWriteDeadline(time.Now().Add(30 * time.Second)); err != nil {
+				log.Println(addr, "ERROR Write Deadline:", err.Error())
+				if err := Send(addr, conn, ERROR, cmd, err.Error()); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
+				reader.Reset(conn)
+				srv.connections.Remove(param)
 				continue
 			}
 			if n, err := io.CopyN(to.conn, reader, int64(length-4)); err != nil {
-				srv.logf("TO: Error copy %s", err.Error())
-				fmt.Fprintln(conn, ERROR, cmd, err.Error())
+				if err := Send(addr, conn, ERROR, cmd, err.Error()); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 				reader.Reset(conn)
+				srv.connections.Remove(param)
 				continue
 			} else {
-				fmt.Fprintln(conn, OK, cmd, param)
-				srv.logf("TO: Sended %d", n)
+				log.Printf("transform from %q to %q completed [%d]", id, param, n)
+				if err := Send(addr, conn, OK, cmd, param); err != nil {
+					log.Println(addr, "ERROR:", err.Error())
+					return // больше нечего делать
+				}
 			}
-			srv.logf("transform from %s to %s completed", id, param)
+
 		default: // неизвестная команда
-			if len(cmd) > 12 {
-				cmd = cmd[:12] + "..."
-			}
-			srv.logf("UNKNOWN CMD: %s %s", id, cmd)
-			fmt.Fprintln(conn, ERROR, cmd, "unknown command")
-			srv.logf("DELETED: %s", id)
-			srv.connections.Remove(id)
-			conn.Close() // закрываем соединение
+			reader.Reset(conn)
 		}
 	}
 }

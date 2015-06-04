@@ -3,26 +3,42 @@ package main
 import (
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
 
 // ConnInfo описывает информацию о соединении.
 type ConnInfo struct {
-	addr, addr2 string    // IP-адрес и порт
-	updated     time.Time // дата и время последнего обновления информации
-	status      string    // строка со статусом
-	conn        net.Conn  // сокетное соединение
+	id      string
+	addr    string    // IP-адрес и порт соединения
+	addr2   string    // передающийся адрес и порт
+	updated time.Time // дата и время последнего обновления информации
+	status  string    // строка со статусом
+	conn    net.Conn  // сокетное соединение
 }
 
 // NewConnInfo возвращает новую информацию о соединении.
-func NewConnInfo(conn net.Conn, addr, addr2 string) *ConnInfo {
+func NewConnInfo(conn net.Conn, id, addr, addr2 string) *ConnInfo {
 	if addr2 == "" {
 		addr2 = "0.0.0.0:0"
 	}
-	var ci = &ConnInfo{addr: addr, addr2: addr2, conn: conn}
-	ci.Update()
+	var ci = &ConnInfo{
+		id:      id,
+		addr:    addr,
+		addr2:   addr2,
+		conn:    conn,
+		updated: time.Now().UTC(),
+	}
 	return ci
+}
+
+// Close закрывает сокетное соединение.
+func (ci *ConnInfo) Close() error {
+	if ci.conn != nil {
+		return ci.conn.Close()
+	}
+	return nil
 }
 
 // String возвращает строковое представление информации о соединении.
@@ -52,25 +68,15 @@ func NewList() *List {
 	return &List{
 		connections: make(map[string]*ConnInfo),
 	}
-	// // периодически очищаем информацию с устаревшими данными
-	// go func() {
-	// 	time.Sleep(d + d/2) // полуторный интервал задержки с очисткой
-	// 	var lastValid = time.Now().Add(-d)
-	// 	list.mu.Lock()
-	// 	for id, ci := range list.connections {
-	// 		if ci.updated.After(lastValid) {
-	// 			delete(list.connections, id)
-	// 		}
-	// 	}
-	// 	list.mu.Unlock()
-	// }()
-	// return list
 }
 
 // Add добавляет новую информацию о соединении.
 func (l *List) Add(conn net.Conn, id, addr, addr2 string) {
 	l.mu.Lock()
-	l.connections[id] = NewConnInfo(conn, addr, addr2)
+	if info, ok := l.connections[id]; ok {
+		info.Close()
+	}
+	l.connections[id] = NewConnInfo(conn, id, addr, addr2)
 	l.mu.Unlock()
 }
 
@@ -96,7 +102,10 @@ func (l *List) Update(id string) {
 // Remove удаляет информацию о соединении с указанным идентификатором.
 func (l *List) Remove(id string) {
 	l.mu.Lock()
-	delete(l.connections, id)
+	if info, ok := l.connections[id]; ok {
+		info.Close()
+		delete(l.connections, id)
+	}
 	l.mu.Unlock()
 }
 
@@ -106,4 +115,14 @@ func (l *List) Info(id string) *ConnInfo {
 	var ci = l.connections[id]
 	l.mu.RUnlock()
 	return ci
+}
+
+func (l *List) List() string {
+	l.mu.RLock()
+	var result = make([]string, 0, len(l.connections))
+	for id := range l.connections {
+		result = append(result, id)
+	}
+	l.mu.RUnlock()
+	return strings.Join(result, ", ")
 }
