@@ -169,10 +169,11 @@ func (srv *Server) servConn(conn net.Conn) {
 				if idx := strings.IndexRune(param, ' '); idx > 1 {
 					id = param[:idx]
 					addr2 = param[idx:]
+					log.Printf("+ ADD 1: id - %q [%x], addr2: %q", id, id, addr2)
 				} else {
 					id = param
+					log.Printf("+ ADD 2: id - %q [%x], addr2: %q", id, id, addr2)
 				}
-				log.Printf("+ ADD: id - %q [%x], addr2: %q", id, id, addr2)
 				srv.connections.Add(conn, id, addr, addr2)
 				if err := Send(addr, conn, OK, cmd, id, addr); err != nil {
 					log.Println(addr, "ERROR:", err.Error())
