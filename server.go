@@ -166,7 +166,7 @@ func (srv *Server) servConn(conn net.Conn) {
 		case CONNECT: // подключение
 			if param != "" {
 				var addr2 string
-				if idx := strings.IndexRune(param, ' '); idx > 1 {
+				if idx := strings.IndexRune(param, ' '); idx > 0 {
 					id = param[:idx]
 					addr2 = param[idx:]
 					log.Printf("+ ADD 1: id - %q [%x], addr2: %q", id, id, addr2)
