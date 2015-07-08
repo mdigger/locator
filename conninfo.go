@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"sync"
@@ -36,6 +37,7 @@ func NewConnInfo(conn net.Conn, id, addr, addr2 string) *ConnInfo {
 // Close закрывает сокетное соединение.
 func (ci *ConnInfo) Close() error {
 	if ci.conn != nil {
+		log.Printf("$ %q CLOSE", ci.id)
 		return ci.conn.Close()
 	}
 	return nil
@@ -48,12 +50,14 @@ func (ci *ConnInfo) String() string {
 
 // SetStatus задает новый текст статуса.
 func (ci *ConnInfo) SetStatus(status string) {
+	log.Printf("$ %q SET STATUS %q", ci.id, status)
 	ci.status = status
 	ci.Update()
 }
 
 // Update устанавливает в текущее время последнего обновления информации.
 func (ci *ConnInfo) Update() {
+	log.Printf("$ %q UPDATE TIME", ci.id)
 	ci.updated = time.Now().UTC()
 }
 
@@ -76,6 +80,7 @@ func (l *List) Add(conn net.Conn, id, addr, addr2 string) {
 	if info, ok := l.connections[id]; ok {
 		info.Close()
 	}
+	log.Printf("$ %q ADD", id)
 	l.connections[id] = NewConnInfo(conn, id, addr, addr2)
 	l.mu.Unlock()
 }
@@ -104,6 +109,7 @@ func (l *List) Remove(id string) {
 	l.mu.Lock()
 	if info, ok := l.connections[id]; ok {
 		info.Close()
+		log.Printf("$ %q REMOVE", id)
 		delete(l.connections, id)
 	}
 	l.mu.Unlock()
@@ -112,7 +118,12 @@ func (l *List) Remove(id string) {
 // Info возвращает информацию о соединении.
 func (l *List) Info(id string) *ConnInfo {
 	l.mu.RLock()
-	var ci = l.connections[id]
+	var ci, ok = l.connections[id]
+	if ok {
+		log.Printf("$ %q FOUND", id)
+	} else {
+		log.Printf("$ %q NOT FOUND", id)
+	}
 	l.mu.RUnlock()
 	return ci
 }
