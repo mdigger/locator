@@ -218,9 +218,9 @@ func (srv *Server) servConn(conn net.Conn) {
 			} else {
 				if info == nil {
 					log.Printf("# INFO: %q NOT CONNECTED", param)
-				} else if info.conn != nil {
+				} else if info.conn == nil {
 					log.Printf("# INFO: %q CONNECTION IS NIL", param)
-				} else if time.Since(info.updated) < timeout {
+				} else if time.Since(info.updated) >= timeout {
 					log.Printf("# INFO: %q CONNECTION TIMEOUT", param)
 				} else {
 					log.Printf("# INFO: %q CONNECTION UNKNOWN ERROR", param)
