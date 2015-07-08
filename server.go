@@ -198,9 +198,9 @@ func (srv *Server) servConn(conn net.Conn) {
 				}
 			}
 		case INFO: // запрос информации о соединении
-			log.Printf("# INFO: %q", param)
+			// log.Printf("# INFO: %q", param)
 			if info := srv.connections.Info(param); info != nil && info.conn != nil && time.Since(info.updated) < timeout {
-				log.Printf("# INFO: %q CONNECTED", param)
+				// log.Printf("# INFO: %q CONNECTED", param)
 				if err := Send(info.addr, info.conn, PING, id); err != nil {
 					log.Println(info.addr, "ERROR:", err.Error())
 					srv.connections.Remove(param)
@@ -210,13 +210,21 @@ func (srv *Server) servConn(conn net.Conn) {
 					}
 					continue
 				}
-				log.Printf("# INFO: %q CONNECTED 2", param)
+				// log.Printf("# INFO: %q CONNECTED 2", param)
 				if err := Send(addr, conn, OK, cmd, param, info.String()); err != nil {
 					log.Println(addr, "ERROR:", err.Error())
 					return // больше нечего делать
 				}
 			} else {
-				log.Printf("# INFO: %q NOT CONNECTED", param)
+				if info == nil {
+					log.Printf("# INFO: %q NOT CONNECTED", param)
+				} else if info.conn != nil {
+					log.Printf("# INFO: %q CONNECTION IS NIL", param)
+				} else if time.Since(info.updated) < timeout {
+					log.Printf("# INFO: %q CONNECTION TIMEOUT", param)
+				} else {
+					log.Printf("# INFO: %q CONNECTION UNKNOWN ERROR", param)
+				}
 				if err := Send(addr, conn, ERROR, cmd, param, "not found"); err != nil {
 					log.Println(addr, "ERROR:", err.Error())
 					return // больше нечего делать
