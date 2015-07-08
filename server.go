@@ -172,6 +172,7 @@ func (srv *Server) servConn(conn net.Conn) {
 				} else {
 					id = param
 				}
+				log.Printf("+ ADD: id - %q, addr2: %q", id, addr2)
 				srv.connections.Add(conn, id, addr, addr2)
 				if err := Send(addr, conn, OK, cmd, id, addr); err != nil {
 					log.Println(addr, "ERROR:", err.Error())
